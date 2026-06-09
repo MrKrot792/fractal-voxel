@@ -1,0 +1,23 @@
+[package]
+name = "voxel-game"
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev]
+debug = true
+
+[profile.tiny]
+inherits = "release"
+opt-level = "s"
+lto = true
+incremental = true
+
+[dependencies]
+wgpu = "29.0.3"
+winit = "0.30"
+env_logger = "0.10"
+anyhow = "1.0.102"
+pollster = "0.4.0"
+log = "0.4.29"
+bytemuck = { version = "1.24", features = [ "derive" ] }
+cgmath = "0.18.0"
