@@ -79,8 +79,8 @@ impl CameraController {
   }
 
   fn handle_mouse_delta(&mut self, delta: (f64, f64), delta_time: f64) {
-    (self.mouse_x, self.mouse_y) = (self.mouse_x + delta.0 * (self.sensivity * delta_time) as f64,
-				    self.mouse_y + delta.1 * (self.sensivity * delta_time) as f64);
+    (self.mouse_x, self.mouse_y) = (self.mouse_x + delta.0 * (self.sensivity) as f64,
+				    self.mouse_y + delta.1 * (self.sensivity) as f64);
   }
 
   // TODO: Move some vars to Camera
@@ -177,10 +177,6 @@ const INDICES: &[u16] = &[
   4, 0, 1,
 ];
 
-const INSTANCES: &[VertexInstance] = &[
-  VertexInstance { position: [ 0.0, 0.0, 0.0 ] },
-];
-
 impl Vertex {
   const ATTRIBS: [wgpu::VertexAttribute; 2] =
     wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
@@ -240,6 +236,8 @@ pub struct State {
   camera_controller: CameraController,
 
   key_manager: KeyManager,
+
+  instances: Vec<VertexInstance>,
 }
 
 impl State {
@@ -300,10 +298,19 @@ impl State {
       }
     );
 
+    let mut instances: Vec<VertexInstance> = Vec::new();
+    for i in 0..8 {
+      for j in 0..8 {
+	for k in 0..8 {
+	  instances.push(VertexInstance { position: [i as f32, j as f32, k as f32] });
+	}
+      }
+    }
+    
     let instance_buffer = device.create_buffer_init(
       &wgpu::util::BufferInitDescriptor {
 	label: Some("Instance buffer"),
-	contents: bytemuck::cast_slice(INSTANCES),
+	contents: bytemuck::cast_slice(instances.as_slice()),
 	usage: wgpu::BufferUsages::VERTEX,
       }
     );
@@ -414,7 +421,7 @@ impl State {
       cache: None, // 6.
     });
 
-    let camera_controller = CameraController::new(5.0, 0.2);
+    let camera_controller = CameraController::new(5.0, 0.001);
     let key_manager = KeyManager::new();
     
     Ok(Self {
@@ -425,7 +432,7 @@ impl State {
       is_surface_configured: false,
       window,
       render_pipeline,
-      fps: Fps::new(60),
+      fps: Fps::new(fps::TargetFps::Unlimited),
       vertex_buffer,
       instance_buffer,
 //    num_vertices,
@@ -437,6 +444,7 @@ impl State {
       camera_bind_group,
       camera_controller,
       key_manager,
+      instances,
     })
   }
   
@@ -513,7 +521,7 @@ impl State {
       render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
       render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
       render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-      render_pass.draw_indexed(0..self.num_indices, 0, 0..INSTANCES.len() as u32);
+      render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as u32);
     }
 
     // submit will accept anything that implements IntoIter
