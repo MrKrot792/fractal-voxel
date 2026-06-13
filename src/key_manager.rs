@@ -92,7 +92,6 @@ impl Entity for KeyInputManager {
 
   fn update(&mut self, _entity_index: &usize, _instance: &mut RenderContext, _delta_time: &crate::fps::Fps) -> anyhow::Result<()> {
     self.update();
-    println!("{:#?}", self.keys);
     Ok(())
   }
 

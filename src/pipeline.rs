@@ -153,7 +153,6 @@ pub struct IndexBufferManager {
 
 impl IndexBufferManager {
   pub fn new(descriptor: IndexBufferDescriptor, device: &wgpu::Device) -> Self {
-    println!("Contents: {:?}", descriptor.contents);
     let b = device.create_buffer_init(
       &wgpu::util::BufferInitDescriptor {
 	label: None,
@@ -266,8 +265,6 @@ impl<'a> RenderPipelineManager<'a> {
     render_pass.set_index_buffer(self.index_buffer.buffer.slice(..), wgpu::IndexFormat::Uint16);
 
     let instances_len = self.vertex_buffers.instance_buffer_len.unwrap_or(1);
-    println!("instances_len: {instances_len}");
-    println!("index_buffer.len: {}", self.index_buffer.content_len);
     render_pass.draw_indexed(0..self.index_buffer.content_len as u32, 0,
 			     0..instances_len as u32);
   }

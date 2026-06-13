@@ -81,8 +81,6 @@ impl Inputable for Camera {
   fn handle_key(&mut self, key_manager: &mut KeyManager) {
     let mut move_vector: Vector3<f32> = Vector3::zero();
 
-    println!("{:?}", key_manager);
-
     if *key_manager.get_key(&KeyCode::KeyW) == KeyState::Held {
       move_vector += self.front;
     }
@@ -153,7 +151,6 @@ impl Camera {
   }
 
   fn resize(&mut self, width: u32, height: u32) {
-    println!("Camera resized: {:?}", self);
     self.aspect = width as f32 / height as f32;
   }
 
