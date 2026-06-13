@@ -50,18 +50,25 @@ impl Fps {
       self.frames_count = 0;
     }
 
-    self.last_frame = now;
-
     self.fps_average = if self.delta > 0.0 { 1.0 / self.delta } else { 0.0 };
   }
 
   pub fn sleep_till_end(&mut self) {
+    // if let TargetFps::Value(v) = self.target_fps {
+    //   use std::time::Duration;
+    //   use std::thread::sleep;
+    //   let frame_budget = 1.0 / v as f64;
+    //   let elapsed_this_frame = self.last_frame.elapsed().as_secs_f64();
+    //   let sleeping_time = frame_budget - elapsed_this_frame;
+    //   if sleeping_time <= 0.0 { return; }
+    //   sleep(Duration::from_secs_f64(sleeping_time));
+    // }
+
     if let TargetFps::Value(v) = self.target_fps {
       use std::time::Duration;
       use std::thread::sleep;
       let frame_budget = 1.0 / v as f64;
-      let elapsed_this_frame = self.last_frame.elapsed().as_secs_f64();
-      let sleeping_time = frame_budget - elapsed_this_frame;
+      let sleeping_time = frame_budget - self.delta;
       if sleeping_time <= 0.0 { return; }
       sleep(Duration::from_secs_f64(sleeping_time));
     }

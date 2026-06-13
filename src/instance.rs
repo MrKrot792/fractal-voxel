@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use winit::window::Window;
-use crate::pipeline::{
+use crate::{entity, pipeline::{
   RenderPipelineManager,
-  RenderPipelineManagerDescriptor,
-};
+  RenderPipelineManagerDescriptor
+}};
 
-pub struct InstanceManager<'a> {
+pub struct RenderContext<'a> {
   surface: wgpu::Surface<'a>,
   device: wgpu::Device,
   queue: wgpu::Queue,
@@ -15,7 +15,7 @@ pub struct InstanceManager<'a> {
   render_pipeline: RenderPipelineManager<'a>,
 }
 
-impl<'a> InstanceManager<'a> {
+impl<'a> RenderContext<'a> {
   pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
     &self.config
   }
@@ -28,6 +28,98 @@ impl<'a> InstanceManager<'a> {
     self.render_pipeline.uniforms.write(&self.queue, buf, buf_index);
   }
   
+  pub fn configure_surface(&mut self) {
+    self.surface.configure(&self.device, &self.config);
+    self.is_surface_configured = true;
+  }
+
+  fn get_output(&mut self, is_suboptimal: &mut bool) -> Option<wgpu::SurfaceTexture> {
+    let output = match self.surface.get_current_texture() {
+      wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+      wgpu::CurrentSurfaceTexture::Suboptimal(t) => {
+	*is_suboptimal = true;
+	t
+      },
+      wgpu::CurrentSurfaceTexture::Timeout
+	| wgpu::CurrentSurfaceTexture::Occluded
+	| wgpu::CurrentSurfaceTexture::Validation => {
+          // Skip this frame
+          return None;
+	}
+      wgpu::CurrentSurfaceTexture::Outdated => {
+	self.surface.configure(&self.device, &self.config);
+	return None;
+      }
+      wgpu::CurrentSurfaceTexture::Lost => {
+	panic!("Lost device");
+      }
+    };
+
+    Some(output)
+  }
+  
+  pub fn render(&mut self) -> anyhow::Result<()> {
+    self.window.request_redraw();
+
+    if !self.is_surface_configured {
+      return Ok(());
+    }
+
+    let mut is_suboptimal = false;
+    let output = match self.get_output(&mut is_suboptimal) {
+      None => return Ok(()),
+      Some(o) => o,
+    };
+    
+    let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+      label: Some("Render Encoder"),
+    });
+
+    {
+      let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Render Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+          view: &view,
+          resolve_target: None,
+          depth_slice: None,
+          ops: wgpu::Operations {
+            load: wgpu::LoadOp::Clear(wgpu::Color {
+              r: 0.1,
+              g: 0.2,
+              b: 0.3,
+              a: 1.0,
+            }),
+            store: wgpu::StoreOp::Store,
+          },
+        })],
+        depth_stencil_attachment: None,
+        occlusion_query_set: None,
+        timestamp_writes: None,
+        multiview_mask: None,
+      });
+
+      self.render_pipeline.draw(&mut render_pass);
+    }
+
+    // submit will accept anything that implements IntoIter
+    self.queue.submit(std::iter::once(encoder.finish()));
+    output.present();
+    
+    if is_suboptimal {
+      self.surface.configure(&self.device, &self.config);
+    }
+    
+    Ok(())
+  }
+}
+
+pub struct InstanceManager<'a> {
+  pub render_context: RenderContext<'a>,
+  pub entity_manager: entity::EntityManager,
+}
+
+impl<'a> InstanceManager<'a> {
   pub async fn new(window: Arc<Window>, render_pipeline_desc: RenderPipelineManagerDescriptor<'a>) -> anyhow::Result<Self> {
     let size = window.inner_size();
 
@@ -80,93 +172,18 @@ impl<'a> InstanceManager<'a> {
       &device,
       &config
     );
-    
+
     Ok(Self {
-      surface,
-      device,
-      queue,
-      config,
-      is_surface_configured: false,
-      window,
-      render_pipeline
-    })
-  }
-
-  pub fn configure_surface(&mut self) {
-    self.surface.configure(&self.device, &self.config);
-    self.is_surface_configured = true;
-  }
-
-  pub fn render(&mut self) -> anyhow::Result<()> {
-    self.window.request_redraw();
-
-    if !self.is_surface_configured {
-      return Ok(());
-    }
-
-    let mut is_suboptimal = false;
-    let output = match self.surface.get_current_texture() {
-      wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-      wgpu::CurrentSurfaceTexture::Suboptimal(t) => {
-	is_suboptimal = true;
-	t
+      render_context: RenderContext {
+	surface,
+	device,
+	queue,
+	config,
+	is_surface_configured: false,
+	window,
+	render_pipeline,
       },
-      wgpu::CurrentSurfaceTexture::Timeout
-	| wgpu::CurrentSurfaceTexture::Occluded
-	| wgpu::CurrentSurfaceTexture::Validation => {
-          // Skip this frame
-          return Ok(());
-	}
-      wgpu::CurrentSurfaceTexture::Outdated => {
-	self.surface.configure(&self.device, &self.config);
-	return Ok(());
-      }
-      wgpu::CurrentSurfaceTexture::Lost => {
-	// You could recreate the devices and all resources
-	// created with it here, but we'll just bail
-	anyhow::bail!("Lost device");
-      }
-    };
-
-    let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-      label: Some("Render Encoder"),
-    });
-
-    {
-      let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Render Pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-          view: &view,
-          resolve_target: None,
-          depth_slice: None,
-          ops: wgpu::Operations {
-            load: wgpu::LoadOp::Clear(wgpu::Color {
-              r: 0.1,
-              g: 0.2,
-              b: 0.3,
-              a: 1.0,
-            }),
-            store: wgpu::StoreOp::Store,
-          },
-        })],
-        depth_stencil_attachment: None,
-        occlusion_query_set: None,
-        timestamp_writes: None,
-        multiview_mask: None,
-      });
-
-      self.render_pipeline.draw(&mut render_pass);
-    }
-
-    // submit will accept anything that implements IntoIter
-    self.queue.submit(std::iter::once(encoder.finish()));
-    output.present();
-    
-    if is_suboptimal {
-      self.surface.configure(&self.device, &self.config);
-    }
-    
-    Ok(())
+      entity_manager: entity::EntityManager::new(),
+    })
   }
 }
