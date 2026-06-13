@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use cgmath::InnerSpace;
@@ -154,13 +153,14 @@ impl Camera {
   }
 
   fn resize(&mut self, width: u32, height: u32) {
+    println!("Camera resized: {:?}", self);
     self.aspect = width as f32 / height as f32;
   }
 
   fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
     let view = cgmath::Matrix4::look_at_rh(self.position, self.position + self.front, self.up);
     let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-    return OPENGL_TO_WGPU_MATRIX * proj * view;
+    OPENGL_TO_WGPU_MATRIX * proj * view
   }
 
   pub fn update_view_proj(&mut self) {

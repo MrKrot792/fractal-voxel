@@ -70,7 +70,7 @@ impl UniformGroupManager {
     );
 
     Self {
-      buffers: buffers,
+      buffers,
       bind_group,
       bind_group_layout,
     }

@@ -152,7 +152,7 @@ impl<'a> State<'a> {
     
     let render_pipeline_desc = pipeline::RenderPipelineManagerDescriptor {
       uniforms,
-      vertex_buffers: vertex_buffers,
+      vertex_buffers,
       instance_buffer_index: Some(1),
       index_buffer: IndexBufferDescriptor {
 	contents: bytemuck::cast_slice(INDICES).into(),
@@ -180,7 +180,6 @@ impl<'a> State<'a> {
     })
   }
 
-  // TODO: make this into an entity
   pub fn resize(&mut self, width: u32, height: u32) {
     if width > 0 && height > 0 {
       let config = self.instance.render_context.get_config_mut();
@@ -245,6 +244,7 @@ impl ApplicationHandler<State<'static>> for App {
       WindowEvent::CloseRequested => event_loop.exit(),
       WindowEvent::Resized(size) => {
 	state.resize(size.width, size.height);
+	state.instance.entity_manager.handle_event_window(event);
       }
       WindowEvent::RedrawRequested => {
 	state.fps.frame_start();

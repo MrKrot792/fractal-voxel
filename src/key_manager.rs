@@ -18,19 +18,19 @@ pub struct KeyManager {
 impl KeyManager {  
   fn insert_if_doesnt_contain(&mut self, key: &KeyCode) {
     if !self.keys.contains_key(key) {
-      self.keys.insert(key.clone(), KeyState::NotPressed);
+      self.keys.insert(*key, KeyState::NotPressed);
     }
   }
 
   pub fn get_key(&mut self, key: &KeyCode) -> &KeyState {
     self.insert_if_doesnt_contain(key);
-    self.keys.get(&key).unwrap()
+    self.keys.get(key).unwrap()
   }
 
-  pub fn update_key_from_state(&mut self, key: &KeyCode, state: &KeyState) {
-    self.insert_if_doesnt_contain(key);
-    self.keys.insert(*key, *state);
-  }
+  // pub fn update_key_from_state(&mut self, key: &KeyCode, state: &KeyState) {
+  //   self.insert_if_doesnt_contain(key);
+  //   self.keys.insert(*key, *state);
+  // }
 
   pub fn update(&mut self) {
     self.keys.iter_mut()
@@ -97,11 +97,9 @@ impl Entity for KeyInputManager {
   }
 
   fn event(&mut self, _entity_index: &usize, _instance: &mut RenderContext, event: &crate::entity::Event) -> anyhow::Result<()> {
-    match event {
-      entity::Event::Key(key_event) => self.keys.update_key(&key_event),
-      _ => (),
+    if let entity::Event::Key(key_event) = event {
+      self.keys.update_key(key_event)
     }
-  
     Ok(())
   }
 }
@@ -122,7 +120,7 @@ impl KeyInputManager {
 
   pub fn update(&mut self) {
     self.keys.update();
-    for (_k, v) in &self.inputables {
+    for v in self.inputables.values() {
       v.borrow_mut().handle_key(&mut self.keys);
     }
   }
