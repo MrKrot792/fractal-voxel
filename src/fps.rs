@@ -74,7 +74,7 @@ impl Fps {
       let sleeping_time = frame_budget - self.delta;
       if sleeping_time <= 0.0 { return; }
       sleep(Duration::from_secs_f64(sleeping_time));
-      self.delta += sleeping_time;
+      self.delta = sleeping_time;
       self.recalculate();
     }
   }
