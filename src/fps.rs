@@ -40,9 +40,12 @@ impl Fps {
     let now = Instant::now();
 
     self.delta = now.duration_since(self.last_frame).as_secs_f64();
-
-    self.elapsed += self.delta;
     self.frames_count += 1;
+    self.recalculate();
+  }
+
+  fn recalculate(&mut self) { 
+    self.elapsed += self.delta;
 
     if self.elapsed >= 1.0 {
       self.elapsed = 0.0;
@@ -52,7 +55,7 @@ impl Fps {
 
     self.fps_average = if self.delta > 0.0 { 1.0 / self.delta } else { 0.0 };
   }
-
+  
   pub fn sleep_till_end(&mut self) {
     // if let TargetFps::Value(v) = self.target_fps {
     //   use std::time::Duration;
@@ -71,6 +74,8 @@ impl Fps {
       let sleeping_time = frame_budget - self.delta;
       if sleeping_time <= 0.0 { return; }
       sleep(Duration::from_secs_f64(sleeping_time));
+      self.delta += sleeping_time;
+      self.recalculate();
     }
   }
 }
