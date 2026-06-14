@@ -241,18 +241,9 @@ impl<'a> RenderPipelineManager<'a> {
 	depth_stencil: Some(wgpu::DepthStencilState {
 	  format: wgpu::TextureFormat::Depth32Float,
 	  depth_write_enabled: Some(true),
-	  depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-	  stencil: wgpu::StencilState {
-	    front: wgpu::StencilFaceState::IGNORE,
-	    back: wgpu::StencilFaceState::IGNORE,
-	    read_mask: !0,
-	    write_mask: !0,
-	  },
-	  bias: wgpu::DepthBiasState {
-	    constant: 0,
-	    slope_scale: 0.0,
-	    clamp: 1.0,
-	  },
+          depth_compare: Some(wgpu::CompareFunction::Less),
+          stencil: wgpu::StencilState::default(),
+          bias: wgpu::DepthBiasState::default(),
 	}),
 	multisample: wgpu::MultisampleState {
           count: 1,

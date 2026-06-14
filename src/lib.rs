@@ -27,29 +27,29 @@ struct Vertex {
 }
 
 const VERTICES: &[Vertex] = &[
-  Vertex { position: [ 1.0,  1.0,  0.0], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 1.0,  0.0,  0.0], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 1.0,  1.0,  1.0], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 1.0,  0.0,  1.0], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 0.0,  1.0,  0.0], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 0.0,  0.0,  0.0], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 0.0,  1.0,  1.0], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 0.0,  0.0,  1.0], color: [0.0, 0.0, 0.0] },
+  Vertex { position: [ 1.0, 1.0, 0.0 ], color: [0.0, 0.0, 0.0] },
+  Vertex { position: [ 1.0, 0.0, 0.0 ], color: [0.0, 0.0, 0.0] },
+  Vertex { position: [ 1.0, 1.0, 1.0 ], color: [0.0, 0.0, 0.0] },
+  Vertex { position: [ 1.0, 0.0, 1.0 ], color: [0.0, 0.0, 0.0] },
+  Vertex { position: [ 0.0, 1.0, 0.0 ], color: [0.0, 0.0, 0.0] },
+  Vertex { position: [ 0.0, 0.0, 0.0 ], color: [0.0, 0.0, 0.0] },
+  Vertex { position: [ 0.0, 1.0, 1.0 ], color: [0.0, 0.0, 0.0] },
+  Vertex { position: [ 0.0, 0.0, 1.0 ], color: [0.0, 0.0, 0.0] },
 ];
 
 const INDICES: &[u16] = &[
-  4, 2, 0,
-  2, 7, 3,
-  6, 5, 7,
-  1, 7, 5,
-  0, 3, 1,
-  4, 1, 5,
-  4, 6, 2,
-  2, 6, 7,
-  6, 4, 5,
-  1, 3, 7,
-  0, 2, 3,
-  4, 0, 1,
+  0, 6, 2, 
+  3, 6, 7, 
+  7, 4, 5, 
+  5, 3, 7, 
+  1, 2, 3, 
+  5, 0, 1, 
+  0, 4, 6, 
+  3, 2, 6, 
+  7, 6, 4, 
+  5, 1, 3, 
+  1, 0, 2, 
+  5, 4, 0,
 ];
 
 impl Vertex {
@@ -100,12 +100,12 @@ pub struct State<'a> {
 impl<'a> State<'a> {
   pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
     let mut instances: Vec<VertexInstance> = Vec::new();
-    for i in 0..8 {
-      for j in 0..8 {
-	for k in 0..8 {
+    for i in 0..32 {
+      for j in 0..32 {
+	for k in 0..32 {
 	  instances.push(VertexInstance {
 	    position: [i as f32, j as f32, k as f32],
-	    color: [i as f32 / 8.0, j as f32 / 8.0, k as f32 / 8.0],
+	    color: [i as f32 / 32.0, j as f32 / 32.0, k as f32 / 32.0],
 	  });
 	}
       }
