@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use winit::window::Window;
 use crate::entities::entity;
@@ -5,6 +7,79 @@ use crate::renderer::pipeline::{
   RenderPipelineManager,
   RenderPipelineManagerDescriptor
 };
+
+pub struct DepthTexture {
+  texture: wgpu::Texture,
+  view: wgpu::TextureView,
+  entity_id: usize,
+}
+
+impl DepthTexture {
+  pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
+    let t = Self::create_texture_fn(device, config);
+    Self {
+      view: Self::create_texture_view_fn(&t),
+      texture: t,
+      entity_id: 0,
+    }
+  }
+
+  pub fn manage(s: Rc<RefCell<DepthTexture>>, entity_manager: &mut entity::EntityManager) -> usize {
+    entity_manager.entity_create(s)
+  }
+  
+  fn create_texture_fn(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+      label: None,
+      dimension: wgpu::TextureDimension::D2,
+      format: wgpu::TextureFormat::Depth32Float,
+      mip_level_count: 1,
+      sample_count: 1,
+      size: wgpu::Extent3d {
+	width:  config.width,
+	height: config.height,
+	depth_or_array_layers: 1,
+      },
+      usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+      view_formats: &[wgpu::TextureFormat::Depth32Float],
+    })
+  }
+
+  fn create_texture_view_fn(texture: &wgpu::Texture) -> wgpu::TextureView {
+    texture.create_view(&wgpu::TextureViewDescriptor {
+      label: None,
+      format: None,
+      dimension: None,
+      usage: None,
+      aspect: wgpu::TextureAspect::DepthOnly,
+      base_mip_level: 0,
+      mip_level_count: None,
+      base_array_layer: 0,
+      array_layer_count: None,
+    })
+  }
+
+  fn recreate_texture_and_view(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
+    self.texture.destroy();
+    self.texture = Self::create_texture_fn(device, config);
+    self.view = Self::create_texture_view_fn(&self.texture);
+  }
+}
+
+impl entity::Entity for DepthTexture {
+  fn set_id(&mut self, new_id: usize) {
+    self.entity_id = new_id;
+  }
+
+  fn event(&mut self, _entity_index: &usize,  render_context: &mut self::RenderContext, event: &entity::Event) -> anyhow::Result<()> {
+    match *event {
+      entity::Event::Resized(_) => self.recreate_texture_and_view(&render_context.device, &render_context.config),
+      _ => (),
+    }
+    
+    Ok(())
+  }
+}
 
 pub struct RenderContext<'a> {
   surface: wgpu::Surface<'a>,
@@ -14,6 +89,7 @@ pub struct RenderContext<'a> {
   is_surface_configured: bool,
   window: Arc<Window>,
   render_pipeline: RenderPipelineManager<'a>,
+  depth_texture: Rc<RefCell<DepthTexture>>,
 }
 
 impl<'a> RenderContext<'a> {
@@ -76,25 +152,35 @@ impl<'a> RenderContext<'a> {
     let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
       label: Some("Render Encoder"),
     });
-
+    
     {
+      let depth_texture = self.depth_texture.borrow_mut();
       let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Render Pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-          view: &view,
-          resolve_target: None,
-          depth_slice: None,
-          ops: wgpu::Operations {
-            load: wgpu::LoadOp::Clear(wgpu::Color {
-              r: 0.1,
-              g: 0.2,
-              b: 0.3,
-              a: 1.0,
-            }),
-            store: wgpu::StoreOp::Store,
-          },
-        })],
-        depth_stencil_attachment: None,
+        color_attachments: &[
+	  Some(wgpu::RenderPassColorAttachment {
+            view: &view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: wgpu::Operations {
+              load: wgpu::LoadOp::Clear(wgpu::Color {
+		r: 0.1,
+		g: 0.2,
+		b: 0.3,
+		a: 1.0,
+              }),
+              store: wgpu::StoreOp::Store,
+            },
+          }),
+	],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+	  view: &depth_texture.view,
+	  depth_ops: Some(wgpu::Operations {
+	    load: wgpu::LoadOp::Clear(0.0),
+	    store: wgpu::StoreOp::Store,
+	  }),
+	  stencil_ops: None,
+	}),
         occlusion_query_set: None,
         timestamp_writes: None,
         multiview_mask: None,
@@ -174,6 +260,11 @@ impl<'a> InstanceManager<'a> {
       &config
     );
 
+    let mut entity_manager = entity::EntityManager::new();
+
+    let depth_texture = Rc::new(RefCell::new(DepthTexture::new(&device, &config)));
+    DepthTexture::manage(depth_texture.clone(), &mut entity_manager);
+
     Ok(Self {
       render_context: RenderContext {
 	surface,
@@ -183,8 +274,9 @@ impl<'a> InstanceManager<'a> {
 	is_surface_configured: false,
 	window,
 	render_pipeline,
+	depth_texture,
       },
-      entity_manager: entity::EntityManager::new(),
+      entity_manager,
     })
   }
 }

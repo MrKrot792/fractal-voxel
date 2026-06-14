@@ -71,15 +71,16 @@ impl Vertex {
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct VertexInstance { 
   position: [f32; 3],
+  color: [f32; 3],
 }
 
 impl VertexInstance {
-  const ATTRIBS: [wgpu::VertexAttribute; 1] =
-    wgpu::vertex_attr_array![2 => Float32x3];
+  const ATTRIBS: [wgpu::VertexAttribute; 2] =
+    wgpu::vertex_attr_array![2 => Float32x3, 3 => Float32x3];
 
   fn desc() -> wgpu::VertexBufferLayout<'static> {
     use std::mem;
-
+    
     wgpu::VertexBufferLayout {
       array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
       step_mode: wgpu::VertexStepMode::Instance,
@@ -102,12 +103,15 @@ impl<'a> State<'a> {
     for i in 0..8 {
       for j in 0..8 {
 	for k in 0..8 {
-	  instances.push(VertexInstance { position: [i as f32, j as f32, k as f32] });
+	  instances.push(VertexInstance {
+	    position: [i as f32, j as f32, k as f32],
+	    color: [i as f32 / 8.0, j as f32 / 8.0, k as f32 / 8.0],
+	  });
 	}
       }
     }
     
-    let fps = Fps::new(fps::TargetFps::Unlimited);
+    let fps = Fps::new(fps::TargetFps::Value(60));
     let size = window.inner_size();
     let camera = Rc::new(RefCell::new(Camera::new(
       CameraDescriptor {
