@@ -100,12 +100,12 @@ pub struct State<'a> {
 impl<'a> State<'a> {
   pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
     let mut instances: Vec<VertexInstance> = Vec::new();
-    for i in 0..32 {
-      for j in 0..32 {
-	for k in 0..32 {
+    for i in 0..8 {
+      for j in 0..8 {
+	for k in 0..8 {
 	  instances.push(VertexInstance {
 	    position: [i as f32, j as f32, k as f32],
-	    color: [i as f32 / 32.0, j as f32 / 32.0, k as f32 / 32.0],
+	    color: [i as f32 / 8.0, j as f32 / 8.0, k as f32 / 8.0],
 	  });
 	}
       }
