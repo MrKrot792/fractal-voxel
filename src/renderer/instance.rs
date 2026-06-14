@@ -1,9 +1,10 @@
 use std::sync::Arc;
 use winit::window::Window;
-use crate::{entity, pipeline::{
+use crate::entities::entity;
+use crate::renderer::pipeline::{
   RenderPipelineManager,
   RenderPipelineManagerDescriptor
-}};
+};
 
 pub struct RenderContext<'a> {
   surface: wgpu::Surface<'a>,

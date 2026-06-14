@@ -1,23 +1,21 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
-use camera::{Camera, CameraDescriptor};
-use instance::InstanceManager;
-use pipeline::{IndexBufferDescriptor, UniformDescriptor, VertexBufferDescriptor};
 
 mod fps;
 use fps::Fps;
 
-mod instance;
-mod pipeline;
-mod entity;
-mod camera;
-mod key_manager;
-use key_manager::KeyInputManager;
+mod renderer;
+use renderer::instance::InstanceManager;
+use renderer::pipeline::{self, IndexBufferDescriptor, UniformDescriptor, VertexBufferDescriptor};
+
+mod entities;
+use entities::camera::{Camera, CameraDescriptor};
+use entities::key_manager::KeyInputManager;
 
 use winit::{
   application::ApplicationHandler,
   event::*,
   event_loop::{ActiveEventLoop, EventLoop},
-//  keyboard::{KeyCode},
+//keyboard::{KeyCode},
   window::Window,
 };
 

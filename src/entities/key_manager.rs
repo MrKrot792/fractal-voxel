@@ -4,7 +4,8 @@ use winit::{
   keyboard::{KeyCode, PhysicalKey}
 };
 
-use crate::{entity::{self, Entity, EntityManager}, instance::RenderContext};
+use crate::entities::entity::{self, *};
+use crate::renderer::instance::RenderContext;
 
 pub trait Inputable {
   fn handle_key(&mut self, keys: &mut KeyManager);
@@ -95,7 +96,7 @@ impl Entity for KeyInputManager {
     Ok(())
   }
 
-  fn event(&mut self, _entity_index: &usize, _instance: &mut RenderContext, event: &crate::entity::Event) -> anyhow::Result<()> {
+  fn event(&mut self, _entity_index: &usize, _instance: &mut RenderContext, event: &crate::entities::entity::Event) -> anyhow::Result<()> {
     if let entity::Event::Key(key_event) = event {
       self.keys.update_key(key_event)
     }

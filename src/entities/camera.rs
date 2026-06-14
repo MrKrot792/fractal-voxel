@@ -8,12 +8,12 @@ use cgmath::Matrix3;
 use cgmath::Point3;
 use cgmath::Rad;
 
-use crate::entity;
-use crate::entity::Entity;
-use crate::entity::EntityManager;
+use crate::entities::{
+  entity::{self, *},
+  key_manager::*,
+};
+use crate::renderer::instance;
 use crate::fps;
-use crate::instance;
-use crate::key_manager::*;
 use winit::keyboard::KeyCode;
 
 // TODO: this can be optimized.
@@ -62,7 +62,7 @@ impl Entity for Camera {
     Ok(())
   }
 
-  fn event(&mut self, _entity_index: &usize, _instance: &mut instance::RenderContext, event: &crate::entity::Event) -> anyhow::Result<()> {
+  fn event(&mut self, _entity_index: &usize, _instance: &mut instance::RenderContext, event: &crate::entities::entity::Event) -> anyhow::Result<()> {
     match *event {
       entity::Event::MouseMotion(d) => self.handle_mouse_delta(d),
       entity::Event::Resized(r) => self.resize(r.width, r.height),

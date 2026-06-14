@@ -2,7 +2,7 @@ use std::collections::{VecDeque, HashMap};
 use std::rc::Rc;
 use std::cell::RefCell;
 use winit::event::{DeviceEvent, ElementState, KeyEvent, MouseButton, WindowEvent};
-use crate::instance;
+use crate::renderer::instance;
 use crate::fps;
 
 #[derive(Debug)]
