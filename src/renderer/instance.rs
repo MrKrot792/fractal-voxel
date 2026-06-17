@@ -102,7 +102,7 @@ impl<'a> RenderContext<'a> {
   }
 
   pub fn uniform_write(&mut self, buf: &[u8], buf_index: usize) {
-    self.render_pipeline.uniforms.write(&self.queue, buf, buf_index);
+    self.render_pipeline.uniforms.write(&self.device, &self.queue, buf, buf_index);
   }
   
   pub fn configure_surface(&mut self) {

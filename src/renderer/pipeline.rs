@@ -1,29 +1,96 @@
 use wgpu::{ShaderModuleDescriptor, util::DeviceExt};
 
+pub struct GpuBuffer {
+  pub buffer: wgpu::Buffer,
+  pub length: u64,
+  usages: wgpu::BufferUsages,
+}
+
+impl GpuBuffer {
+  pub fn new(
+    device: &wgpu::Device,
+    length: usize,
+    usages: wgpu::BufferUsages
+  ) -> Self {
+    Self {
+      buffer: device.create_buffer(&wgpu::wgt::BufferDescriptor {
+	label: None,
+	size: length as u64,
+	usage: usages,
+	mapped_at_creation: false
+      }),
+      length: length as u64,
+      usages
+    }
+  }
+
+  pub fn new_with_data(
+    device: &wgpu::Device,
+    contents: &[u8],
+    usages: wgpu::BufferUsages
+  ) -> Self {
+    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+      label: None,
+      contents: contents,
+      usage: usages,
+    });
+    
+    Self {
+      length: buffer.size(),
+      buffer,
+      usages,
+    }
+  }
+
+  pub fn recreate(&mut self, device: &wgpu::Device, length: usize) {
+    self.buffer.destroy();
+    self.buffer = device.create_buffer(&wgpu::wgt::BufferDescriptor {
+      label: None,
+      size: Self::valid_length(length),
+      usage: self.usages,
+      mapped_at_creation: false
+    });
+    self.length = Self::valid_length(length);
+  }
+
+  fn valid_length(length: usize) -> u64 {
+    let unpadded_size = length as wgpu::BufferAddress;
+    let align_mask = wgpu::COPY_BUFFER_ALIGNMENT - 1;
+    let padded_size =
+      ((unpadded_size + align_mask) & !align_mask).max(wgpu::COPY_BUFFER_ALIGNMENT);
+
+    padded_size
+  }
+
+  /// optionally `queue.submit([])` after this 
+  pub fn write_data(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, contents: &[u8]) {
+    if contents.len() > self.length as usize {
+      self.recreate(device, contents.len());
+    }
+    queue.write_buffer(&self.buffer, 0, contents);
+  }
+}
+
 pub struct UniformDescriptor {
   pub contents: Vec<u8>,
   pub visibility: wgpu::ShaderStages,
 }
 
 pub struct UniformGroupManager {
-  buffers: Vec<wgpu::Buffer>,
+  buffers: Vec<GpuBuffer>,
   bind_group_layout: wgpu::BindGroupLayout,
   bind_group: wgpu::BindGroup
 }
 
-impl UniformGroupManager {  
+impl UniformGroupManager {
   pub fn new(descriptors: &[UniformDescriptor], device: &wgpu::Device) -> Self {
     let mut buffers = Vec::new();
     for v in descriptors {
-      buffers.push(
-	device.create_buffer_init(
-	  &wgpu::util::BufferInitDescriptor{
-	    label: None,
-	    contents: &v.contents,
-	    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-	  }
-	)
-      );
+      buffers.push(GpuBuffer::new_with_data(
+	device,
+	&v.contents,
+	wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+      ));
     }
 
     let mut bind_group_layout_entries = Vec::new();
@@ -56,7 +123,7 @@ impl UniformGroupManager {
       bind_group_entries.push(
 	wgpu::BindGroupEntry {
 	  binding: i as u32,
-	  resource: buffers[i].as_entire_binding(),
+	  resource: buffers[i].buffer.as_entire_binding(),
 	}
       );
     }
@@ -76,8 +143,8 @@ impl UniformGroupManager {
     }
   }
 
-  pub fn write(&mut self, queue: &wgpu::Queue, buf: &[u8], buf_index: usize) {
-    queue.write_buffer(&self.buffers[buf_index], 0, buf);
+  pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, buf: &[u8], buf_index: usize) {
+    &self.buffers[buf_index].write_data(device, queue, buf);
   }
 }
 
@@ -92,8 +159,9 @@ pub struct VertexBuffersDescriptor<'a> {
   pub instance_buffer_len: Option<usize>,
 }
 
+    
 pub struct VertexBuffersManager<'a> {
-  buffers: Vec<wgpu::Buffer>,
+  buffers: Vec<GpuBuffer>,
   descriptions: Vec<wgpu::VertexBufferLayout<'a>>,
   instance_buffer_len: Option<usize>,
   instance_buffer_index: Option<usize>,
@@ -105,12 +173,10 @@ impl<'a> VertexBuffersManager<'a> {
     let mut descriptions = Vec::new();
     
     for i in descriptors.buffers {
-      buffers.push(device.create_buffer_init(
-	&wgpu::util::BufferInitDescriptor {
-	  label: None,
-	  contents: &i.contents,
-	  usage: wgpu::BufferUsages::VERTEX
-	}
+      buffers.push(GpuBuffer::new_with_data(
+	device,
+	&i.contents,
+	wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
       ));
 
       descriptions.push(i.description.clone());
@@ -126,7 +192,7 @@ impl<'a> VertexBuffersManager<'a> {
 
   pub fn set_vertex_buffer(&mut self, render_pass: &mut wgpu::RenderPass) {
     for (i, v) in self.buffers.iter().enumerate() {
-      render_pass.set_vertex_buffer(i as u32, v.slice(..));
+      render_pass.set_vertex_buffer(i as u32, v.buffer.slice(..));
     }
   }
 
@@ -147,18 +213,16 @@ pub struct IndexBufferDescriptor {
 }
 
 pub struct IndexBufferManager {
-  buffer: wgpu::Buffer,
+  buffer: GpuBuffer,
   content_len: usize,
 }
 
 impl IndexBufferManager {
   pub fn new(descriptor: IndexBufferDescriptor, device: &wgpu::Device) -> Self {
-    let b = device.create_buffer_init(
-      &wgpu::util::BufferInitDescriptor {
-	label: None,
-	contents: &descriptor.contents,
-	usage: wgpu::BufferUsages::INDEX
-      });
+    let b = GpuBuffer::new_with_data(
+      device,
+      &descriptor.contents,
+      wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDEX);
     
     Self {
       buffer: b,
@@ -268,7 +332,7 @@ impl<'a> RenderPipelineManager<'a> {
     render_pass.set_pipeline(&self.pipeline);
     render_pass.set_bind_group(0, &self.uniforms.bind_group, &[]);
     self.vertex_buffers.set_vertex_buffer(render_pass);
-    render_pass.set_index_buffer(self.index_buffer.buffer.slice(..), wgpu::IndexFormat::Uint16);
+    render_pass.set_index_buffer(self.index_buffer.buffer.buffer.slice(..), wgpu::IndexFormat::Uint16);
 
     let instances_len = self.vertex_buffers.instance_buffer_len.unwrap_or(1);
     render_pass.draw_indexed(0..self.index_buffer.content_len as u32, 0,
