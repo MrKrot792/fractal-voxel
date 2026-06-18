@@ -100,7 +100,8 @@ impl Inputable for Camera {
     if *key_manager.get_key(&KeyCode::Space) == KeyState::Held {
       move_vector += self.up;
     }
-    if *key_manager.get_key(&KeyCode::KeyR) == KeyState::Held {
+
+    if *key_manager.get_key(&KeyCode::KeyR) == KeyState::Pressed {
       println!("pos: {:?}", self.position);
     }
     
