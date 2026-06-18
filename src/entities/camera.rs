@@ -37,6 +37,7 @@ pub struct Camera {
   
   mouse_x: f64,
   mouse_y: f64,
+  running: bool,
 
   entity_id: usize,
 }
@@ -99,8 +100,17 @@ impl Inputable for Camera {
     if *key_manager.get_key(&KeyCode::Space) == KeyState::Held {
       move_vector += self.up;
     }
+    if *key_manager.get_key(&KeyCode::KeyR) == KeyState::Held {
+      println!("pos: {:?}", self.position);
+    }
+    
+    if *key_manager.get_key(&KeyCode::ControlLeft) == KeyState::Held {
+      self.running = true;
+    } else {
+      self.running = false;
+    }
 
-    self.position += move_vector * self.speed * self.fps.delta as f32;
+    self.position += move_vector * (if !self.running { self.speed } else { self.speed * 2.0 }) * self.fps.delta as f32;
   }
 }
 
@@ -123,7 +133,7 @@ impl Camera {
       fovy: descriptor.fovy,
       aspect: descriptor.aspect,
       znear: 0.1,
-      zfar: 1000.0,
+      zfar: 100000.0,
       view_proj: cgmath::Matrix4::identity().into(),
       
       up: Vector3::zero(),
@@ -134,6 +144,7 @@ impl Camera {
       
       mouse_x: 0.0,
       mouse_y: 0.0,
+      running: false,
 
       entity_id: 0,
     }
