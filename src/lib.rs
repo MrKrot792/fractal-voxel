@@ -33,7 +33,7 @@ pub struct State<'a> {
 
 impl<'a> State<'a> {
   pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
-    let fps = Fps::new(fps::TargetFps::Value(60));
+    let fps = Fps::new(fps::TargetFps::Unlimited);
     let size = window.inner_size();
     let camera = Rc::new(RefCell::new(Camera::new(
       CameraDescriptor {
@@ -172,6 +172,7 @@ impl ApplicationHandler<State<'static>> for App {
       }
       WindowEvent::RedrawRequested => {
 	state.fps.frame_start();
+	dbg!(state.fps);
 	state.instance.entity_manager.dispatch_events(&mut state.instance.render_context).unwrap();
 	state.update().unwrap();
 	
