@@ -119,10 +119,10 @@ impl KeyInputManager {
   }
 
   pub fn update(&mut self) {
-    self.keys.update();
     for v in self.inputables.values() {
       v.borrow_mut().handle_key(&mut self.keys);
     }
+    self.keys.update();
   }
   
   // TODO: maybe move this to the entity manager
