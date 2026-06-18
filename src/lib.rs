@@ -1,3 +1,4 @@
+use std::ptr::null;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 mod fps;
@@ -11,6 +12,8 @@ mod entities;
 use entities::camera::{Camera, CameraDescriptor};
 use entities::key_manager::KeyInputManager;
 
+mod chunks;
+
 use winit::{
   application::ApplicationHandler,
   event::*,
@@ -19,98 +22,17 @@ use winit::{
   window::Window,
 };
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-  position: [f32; 3],
-  color: [f32; 3],
-}
-
-const VERTICES: &[Vertex] = &[
-  Vertex { position: [ 1.0, 1.0, 0.0 ], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 1.0, 0.0, 0.0 ], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 1.0, 1.0, 1.0 ], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 1.0, 0.0, 1.0 ], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 0.0, 1.0, 0.0 ], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 0.0, 0.0, 0.0 ], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 0.0, 1.0, 1.0 ], color: [0.0, 0.0, 0.0] },
-  Vertex { position: [ 0.0, 0.0, 1.0 ], color: [0.0, 0.0, 0.0] },
-];
-
-const INDICES: &[u16] = &[
-  0, 6, 2, 
-  3, 6, 7, 
-  7, 4, 5, 
-  5, 3, 7, 
-  1, 2, 3, 
-  5, 0, 1, 
-  0, 4, 6, 
-  3, 2, 6, 
-  7, 6, 4, 
-  5, 1, 3, 
-  1, 0, 2, 
-  5, 4, 0,
-];
-
-impl Vertex {
-  const ATTRIBS: [wgpu::VertexAttribute; 2] =
-    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
-
-  fn desc() -> wgpu::VertexBufferLayout<'static> {
-    use std::mem;
-
-    wgpu::VertexBufferLayout {
-      array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-      step_mode: wgpu::VertexStepMode::Vertex,
-      attributes: &Self::ATTRIBS,
-    }
-  }
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct VertexInstance { 
-  position: [f32; 3],
-  color: [f32; 3],
-}
-
-impl VertexInstance {
-  const ATTRIBS: [wgpu::VertexAttribute; 2] =
-    wgpu::vertex_attr_array![2 => Float32x3, 3 => Float32x3];
-
-  fn desc() -> wgpu::VertexBufferLayout<'static> {
-    use std::mem;
-    
-    wgpu::VertexBufferLayout {
-      array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-      step_mode: wgpu::VertexStepMode::Instance,
-      attributes: &Self::ATTRIBS,
-    }
-  }
-}
-
 // This will store the state of our game
 pub struct State<'a> {
   instance: InstanceManager<'a>,
   fps: fps::Fps,
   _camera_id: usize,
   _key_manager_id: usize,
+  chunk_manager: chunks::ChunkManager,
 }
 
 impl<'a> State<'a> {
   pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
-    let mut instances: Vec<VertexInstance> = Vec::new();
-    for i in 0..8 {
-      for j in 0..8 {
-	for k in 0..8 {
-	  instances.push(VertexInstance {
-	    position: [i as f32, j as f32, k as f32],
-	    color: [i as f32 / 8.0, j as f32 / 8.0, k as f32 / 8.0],
-	  });
-	}
-      }
-    }
-    
     let fps = Fps::new(fps::TargetFps::Value(60));
     let size = window.inner_size();
     let camera = Rc::new(RefCell::new(Camera::new(
@@ -122,6 +44,11 @@ impl<'a> State<'a> {
 	fps,
       }
     )));
+
+    let mut chunk_manager = chunks::ChunkManager::new();
+    chunks::Vertex::desc();
+    chunk_manager.regenerate_chunks_at((0.0, 0.0, 0.0).into());
+    let (vertices, indices) = chunk_manager.get_vertices_and_indices();
 
     {
       camera.borrow_mut().update_view_proj();
@@ -140,16 +67,12 @@ impl<'a> State<'a> {
     let vertex_buffers = pipeline::VertexBuffersDescriptor {
       buffers: vec![
 	VertexBufferDescriptor {
-          contents: bytemuck::cast_slice(VERTICES).into(),
-	  description: Vertex::desc(),
-	},
-	VertexBufferDescriptor {
-          contents: bytemuck::cast_slice(instances.clone().as_slice()).into(),
-	  description: VertexInstance::desc(),
+          contents: Some(Vec::from(bytemuck::cast_slice(&vertices))),
+	  description: chunks::Vertex::desc(),
 	},
       ],
-      instance_buffer_index: Some(1),
-      instance_buffer_len: Some(instances.len()),
+      instance_buffer_index: None,
+      instance_buffer_len:   None,
     };
     
     let render_pipeline_desc = pipeline::RenderPipelineManagerDescriptor {
@@ -157,8 +80,8 @@ impl<'a> State<'a> {
       vertex_buffers,
       instance_buffer_index: Some(1),
       index_buffer: IndexBufferDescriptor {
-	contents: bytemuck::cast_slice(INDICES).into(),
-	content_len: INDICES.len(),
+	contents: Some(Vec::from(bytemuck::cast_slice(&indices))),
+	content_len: indices.len(),
       },
       shader: pipeline::ShaderDataDescriptor::RawData(include_str!("shader.wgsl")),
     };
@@ -178,7 +101,8 @@ impl<'a> State<'a> {
       instance: instance_manager,
       fps,
       _camera_id: camera_id,
-      _key_manager_id: key_manager_id
+      _key_manager_id: key_manager_id,
+      chunk_manager,
     })
   }
 
@@ -202,8 +126,6 @@ impl<'a> State<'a> {
       &self.fps
     )?;
     
-    dbg!(self.fps);
-
     Ok(())
   }
 }
@@ -261,7 +183,7 @@ impl ApplicationHandler<State<'static>> for App {
 	  }
 	}
 
-	state.fps.frame_end();	
+	state.fps.frame_end();
 	state.fps.sleep_till_end();
       },
       _ => state.instance.entity_manager.handle_event_window(event),
