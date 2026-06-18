@@ -19,7 +19,7 @@ impl GpuBuffer {
 	usage: usages,
 	mapped_at_creation: false
       }),
-      length: length as u64,
+      length: Self::valid_length(length),
       usages
     }
   }
@@ -144,12 +144,12 @@ impl UniformGroupManager {
   }
 
   pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, buf: &[u8], buf_index: usize) {
-    &self.buffers[buf_index].write_data(device, queue, buf);
+    self.buffers[buf_index].write_data(device, queue, buf);
   }
 }
 
 pub struct VertexBufferDescriptor<'a> {
-  pub contents: Vec<u8>,
+  pub contents: Option<Vec<u8>>,
   pub description: wgpu::VertexBufferLayout<'a>,
 }
 
@@ -171,13 +171,19 @@ impl<'a> VertexBuffersManager<'a> {
   pub fn new(descriptors: VertexBuffersDescriptor<'a>, device: &wgpu::Device) -> Self {
     let mut buffers = Vec::new();
     let mut descriptions = Vec::new();
+
+    let usages = wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST;
     
     for i in descriptors.buffers {
-      buffers.push(GpuBuffer::new_with_data(
-	device,
-	&i.contents,
-	wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
-      ));
+      if let Some(contents) = i.contents {
+	buffers.push(GpuBuffer::new_with_data(
+	  device,
+	  &contents,
+	  usages,
+	));
+      } else {
+	buffers.push(GpuBuffer::new(device, 256, usages));
+      }
 
       descriptions.push(i.description.clone());
     }
@@ -208,7 +214,7 @@ impl<'a> VertexBuffersManager<'a> {
 
 #[derive(Clone)]
 pub struct IndexBufferDescriptor {
-  pub contents: Vec<u8>,
+  pub contents: Option<Vec<u8>>,
   pub content_len: usize,
 }
 
@@ -219,10 +225,17 @@ pub struct IndexBufferManager {
 
 impl IndexBufferManager {
   pub fn new(descriptor: IndexBufferDescriptor, device: &wgpu::Device) -> Self {
-    let b = GpuBuffer::new_with_data(
-      device,
-      &descriptor.contents,
-      wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDEX);
+    let usages = wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDEX;
+    let b: GpuBuffer;
+    if let Some(contents) = descriptor.contents {
+      b = GpuBuffer::new_with_data(
+	device,
+	&contents,
+	usages
+      );
+    } else {
+      b = GpuBuffer::new(device, 256, usages);
+    }
     
     Self {
       buffer: b,
@@ -265,7 +278,7 @@ impl<'a> RenderPipelineManager<'a> {
     
     let shader = device.create_shader_module(
       ShaderModuleDescriptor {
-	label: Some(shader_data),
+	label: None,
 	source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(shader_data)),
       }
     );
@@ -332,7 +345,7 @@ impl<'a> RenderPipelineManager<'a> {
     render_pass.set_pipeline(&self.pipeline);
     render_pass.set_bind_group(0, &self.uniforms.bind_group, &[]);
     self.vertex_buffers.set_vertex_buffer(render_pass);
-    render_pass.set_index_buffer(self.index_buffer.buffer.buffer.slice(..), wgpu::IndexFormat::Uint16);
+    render_pass.set_index_buffer(self.index_buffer.buffer.buffer.slice(..), wgpu::IndexFormat::Uint32);
 
     let instances_len = self.vertex_buffers.instance_buffer_len.unwrap_or(1);
     render_pass.draw_indexed(0..self.index_buffer.content_len as u32, 0,
