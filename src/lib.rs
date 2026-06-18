@@ -1,4 +1,3 @@
-use std::ptr::null;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 mod fps;
@@ -26,8 +25,6 @@ use winit::{
 pub struct State<'a> {
   instance: InstanceManager<'a>,
   fps: fps::Fps,
-  _camera_id: usize,
-  _key_manager_id: usize,
   chunk_manager: chunks::ChunkManager,
 }
 
@@ -90,18 +87,16 @@ impl<'a> State<'a> {
 
     let mut key_manager = KeyInputManager::new();
     key_manager.register(camera.clone());
-    let camera_id = Camera::manage(
+    Camera::manage(
       camera,
       &mut instance_manager.entity_manager
     );
-    let key_manager_id = key_manager.manage(
+    key_manager.manage(
       &mut instance_manager.entity_manager
     );
     Ok(Self {
       instance: instance_manager,
       fps,
-      _camera_id: camera_id,
-      _key_manager_id: key_manager_id,
       chunk_manager,
     })
   }
@@ -172,7 +167,7 @@ impl ApplicationHandler<State<'static>> for App {
       }
       WindowEvent::RedrawRequested => {
 	state.fps.frame_start();
-	dbg!(state.fps);
+//	dbg!(state.fps);
 	state.instance.entity_manager.dispatch_events(&mut state.instance.render_context).unwrap();
 	state.update().unwrap();
 	
