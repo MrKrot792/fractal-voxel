@@ -22,3 +22,4 @@ log = "0.4.29"
 bytemuck = { version = "1.24", features = [ "derive" ] }
 cgmath = "0.18.0"
 rand = "0.10.1"
+bitflags = "2.13.0"
