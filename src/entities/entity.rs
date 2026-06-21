@@ -31,6 +31,10 @@ bitflags::bitflags! {
     /// Called whenever the entity's ID changes. Usually, it never
     /// happens, so this is reserved for future use.
     const SET_ID = 1 << 2;
+    /// Called after updating, used for rendering. Gives you access
+    /// to the render context, which allows for updating some
+    /// [`GpuBuffer`]s, or anything else you need to do.
+    const RENDER = 1 << 3;
   }
 }
 
@@ -42,7 +46,8 @@ pub type EntityId = usize;
 pub trait Entity: Any {
   /// The only needed function.
   fn init(&mut self, id: EntityId) -> RequestedCallbacks;
-  fn update(&mut self, _render_context: &mut instance::RenderContext, _fps: &fps::Fps) -> anyhow::Result<()> { Ok(()) }
+  fn update(&mut self, _fps: &fps::Fps) -> anyhow::Result<()> { Ok(()) }
+  fn render(&mut self, _render_context: &mut instance::RenderContext) -> anyhow::Result<()> { Ok(()) }
   fn event(&mut self, _render_context: &mut instance::RenderContext, _event: &Event) -> anyhow::Result<()> { Ok(()) }
   fn set_id(&mut self, _new_id: EntityId) -> anyhow::Result<()> { Ok(()) }
 }
@@ -82,13 +87,23 @@ impl EntityManager {
     self.entities.remove(&entity).unwrap();
   }
 
-  pub fn update(&mut self, render_context: &mut instance::RenderContext, fps: &fps::Fps) -> anyhow::Result<()> {
+  pub fn update(&mut self, fps: &fps::Fps) -> anyhow::Result<()> {
     for v in self.entities.values_mut() {
       if !v.callbacks.contains(RequestedCallbacks::UPDATE) { continue; }
       
-      v.entity.borrow_mut().update(render_context, fps)?
+      v.entity.borrow_mut().update(fps)?
     }
 
+    Ok(())
+  }
+
+  pub fn render(&mut self, render_context: &mut instance::RenderContext) -> anyhow::Result<()> {
+    for v in self.entities.values_mut() {
+      if !v.callbacks.contains(RequestedCallbacks::RENDER) { continue; }
+      
+      v.entity.borrow_mut().render(render_context)?
+    }
+    
     Ok(())
   }
   
