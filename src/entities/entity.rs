@@ -46,7 +46,7 @@ pub type EntityId = usize;
 pub trait Entity: Any {
   /// The only needed function.
   fn init(&mut self, id: EntityId) -> RequestedCallbacks;
-  fn update(&mut self, _fps: &fps::Fps) -> anyhow::Result<()> { Ok(()) }
+  fn update(&mut self, _render_context: &mut instance::RenderContext, _fps: &fps::Fps) -> anyhow::Result<()> { Ok(()) }
   fn render(&mut self, _render_context: &mut instance::RenderContext) -> anyhow::Result<()> { Ok(()) }
   fn event(&mut self, _render_context: &mut instance::RenderContext, _event: &Event) -> anyhow::Result<()> { Ok(()) }
   fn set_id(&mut self, _new_id: EntityId) -> anyhow::Result<()> { Ok(()) }
