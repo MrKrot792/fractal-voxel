@@ -1,5 +1,6 @@
+use std::borrow::BorrowMut;
 use std::collections::{VecDeque, HashMap};
-use std::cell::RefCell;
+use std::cell::{BorrowError, BorrowMutError, Ref, RefCell, RefMut};
 use winit::event::{DeviceEvent, ElementState, KeyEvent, MouseButton, WindowEvent};
 use crate::renderer::instance;
 use crate::fps;
@@ -38,17 +39,40 @@ bitflags::bitflags! {
   }
 }
 
-pub type EntityId = usize;
+#[derive(Clone, Copy, Hash, Debug, Eq, PartialEq)]
+pub struct EntityId {
+  id: usize,
+}
+
+impl EntityId {
+  pub fn empty() -> Self {
+    Self { id: 0 }
+  }
+  
+  pub fn new(id: usize) -> Self {
+    Self { id }
+  }
+  
+  pub fn get_entity(&self, entity_manager: &EntityManager) -> Result<Ref<'_, Box<dyn Entity>>, BorrowError> {
+    entity_manager.entity_get(self.clone())
+  }
+  
+  pub fn get_entity_mut(&self, entity_manager: &EntityManager) -> Result<RefMut<'_, Box<dyn Entity>>, BorrowMutError> {
+    entity_manager.entity_get_mut(self.clone())
+  }
+}
 
 /// A trait for general kind of entity, for something that updates in
 /// the game. For example, some kind of manager.
-/// The Entity must save it's ID when [`init()`] is called.
+/// The Entity must save it's ID when `init()` is called.
+/// `event()` is called first, then `update()` is called, and lastly,
+/// `render()` is called.
 pub trait Entity: Any {
   /// The only needed function.
   fn init(&mut self, id: EntityId) -> RequestedCallbacks;
-  fn update(&mut self, _render_context: &mut instance::RenderContext, _fps: &fps::Fps) -> anyhow::Result<()> { Ok(()) }
+  fn event(&mut self, _event: &Event) -> anyhow::Result<()> { Ok(()) }
+  fn update(&mut self, entity_manager: &mut EntityManagerInner, _fps: &fps::Fps) -> anyhow::Result<()> { Ok(()) }
   fn render(&mut self, _render_context: &mut instance::RenderContext) -> anyhow::Result<()> { Ok(()) }
-  fn event(&mut self, _render_context: &mut instance::RenderContext, _event: &Event) -> anyhow::Result<()> { Ok(()) }
   fn set_id(&mut self, _new_id: EntityId) -> anyhow::Result<()> { Ok(()) }
 }
 
@@ -57,38 +81,62 @@ struct EntityWithCallbacks {
   callbacks: RequestedCallbacks,
 }
 
+#[derive(Default)]
+pub struct EntityManagerInner {
+  entities: HashMap<EntityId, EntityWithCallbacks>,
+}
+
+impl EntityManagerInner {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn entity_create<T: Entity + 'static>(&mut self, last_id: &mut usize, mut entity: T) -> EntityId {
+    let id = EntityId::new(*last_id);
+    let actual_entity = EntityWithCallbacks {
+      callbacks: entity.init(id),
+      entity: RefCell::new(Box::new(entity)),
+    };
+    
+    self.entities.insert(id, actual_entity);
+    *last_id += 1;
+    id
+  }
+
+  /// Destroys the entity using the ID.
+  pub fn entity_destroy(&mut self, entity: EntityId) {
+    self.entities.remove(&entity).unwrap();
+  }
+
+  pub fn entity_get(&mut self, entity: EntityId) -> Result<Ref<'_, Box<dyn Entity>>, BorrowError> {
+    self.entities.get(&entity).unwrap().entity.try_borrow()
+  }
+  
+  pub fn entity_get_mut(&mut self, entity: EntityId) -> Result<RefMut<'_, Box<dyn Entity>>, BorrowMutError> {
+    self.entities.get(&entity).unwrap().entity.try_borrow_mut()
+  }  
+}
+
 // TODO: Maybe add multiple Vec's for storing referemces to
 // entities with different callbacks, so it's faster to call
 // them.
 #[derive(Default)]
 pub struct EntityManager {
   event_queue: VecDeque<Event>,
-  entities: HashMap<EntityId, EntityWithCallbacks>,
-  entity_last_id: EntityId,
+  entities: EntityManagerInner,
+  entity_last_id: usize,
 }
 
 impl EntityManager {
   pub fn new() -> Self {
-    Self::default()
-  }
-  
-  pub fn entity_create<T: Entity + 'static>(&mut self, mut entity: T) -> EntityId {
-    let actual_entity = EntityWithCallbacks {
-      callbacks: entity.init(self.entity_last_id),
-      entity: RefCell::new(Box::new(entity)),
-    };
-     
-    self.entities.insert(self.entity_last_id, actual_entity);
-    self.entity_last_id += 1;
-    self.entity_last_id - 1
+    let mut s = Self::default();
+    s.entity_last_id = 1;
+    s
   }
 
-  pub fn entity_destroy(&mut self, entity: EntityId) {
-    self.entities.remove(&entity).unwrap();
-  }
-
+  /// Make the entity manager manage the entity.
   pub fn update(&mut self, fps: &fps::Fps) -> anyhow::Result<()> {
-    for v in self.entities.values_mut() {
+    for v in self.entities.entities.values_mut() {
       if !v.callbacks.contains(RequestedCallbacks::UPDATE) { continue; }
       
       v.entity.borrow_mut().update(fps)?
@@ -98,7 +146,7 @@ impl EntityManager {
   }
 
   pub fn render(&mut self, render_context: &mut instance::RenderContext) -> anyhow::Result<()> {
-    for v in self.entities.values_mut() {
+    for v in self.entities.entities.values_mut() {
       if !v.callbacks.contains(RequestedCallbacks::RENDER) { continue; }
       
       v.entity.borrow_mut().render(render_context)?
@@ -126,11 +174,11 @@ impl EntityManager {
     }
   }
 
-  pub fn dispatch_events(&mut self, render_context: &mut instance::RenderContext) -> anyhow::Result<()> {
-    for v in self.entities.values_mut() {
+  pub fn dispatch_events(&mut self) -> anyhow::Result<()> {
+    for v in self.entities.entities.values_mut() {
       if !v.callbacks.contains(RequestedCallbacks::EVENT) { continue; }
       for event in self.event_queue.iter() {
-	v.entity.borrow_mut().event(render_context, event)?;
+	v.entity.borrow_mut().event(event)?;
       }
     }
 

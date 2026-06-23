@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::any::Any;
 use std::sync::Arc;
 use winit::window::Window;
 use crate::entities::entity;
@@ -11,7 +10,8 @@ use crate::renderer::pipeline::{
 pub struct DepthTexture {
   texture: wgpu::Texture,
   view: wgpu::TextureView,
-  entity_id: usize,
+  entity_id: entity::EntityId,
+  should_recreate: bool,
 }
 
 impl DepthTexture {
@@ -20,12 +20,13 @@ impl DepthTexture {
     Self {
       view: Self::create_texture_view_fn(&t),
       texture: t,
-      entity_id: 0,
+      entity_id: entity::EntityId::empty(),
+      should_recreate: true,
     }
   }
 
-  pub fn manage(s: Rc<RefCell<DepthTexture>>, entity_manager: &mut entity::EntityManager) -> usize {
-    entity_manager.entity_create(s)
+  pub fn manage(self, entity_manager: &mut entity::EntityManager) -> entity::EntityId {
+    entity_manager.entity_create(self)
   }
   
   fn create_texture_fn(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> wgpu::Texture {
@@ -67,16 +68,25 @@ impl DepthTexture {
 }
 
 impl entity::Entity for DepthTexture {
-  fn set_id(&mut self, new_id: usize) {
-    self.entity_id = new_id;
+  fn init(&mut self, id: entity::EntityId) -> entity::RequestedCallbacks {
+    self.entity_id = id;
+    entity::RequestedCallbacks::EVENT | entity::RequestedCallbacks::RENDER
   }
-
-  fn event(&mut self, _entity_index: &usize,  render_context: &mut self::RenderContext, event: &entity::Event) -> anyhow::Result<()> {
+  
+  fn event(&mut self, event: &entity::Event) -> anyhow::Result<()> {
     match *event {
-      entity::Event::Resized(_) => self.recreate_texture_and_view(&render_context.device, &render_context.config),
+      entity::Event::Resized(_) => self.should_recreate = true,
       _ => (),
     }
     
+    Ok(())
+  }
+
+  fn render(&mut self, render_context: &mut self::RenderContext) -> anyhow::Result<()> {
+    if self.should_recreate {
+      self.recreate_texture_and_view(&render_context.device, &render_context.config);
+      self.should_recreate = false;
+    }
     Ok(())
   }
 }
@@ -89,7 +99,7 @@ pub struct RenderContext<'a> {
   is_surface_configured: bool,
   window: Arc<Window>,
   render_pipeline: RenderPipelineManager<'a>,
-  depth_texture: Rc<RefCell<DepthTexture>>,
+  depth_texture: entity::EntityId
 }
 
 impl<'a> RenderContext<'a> {
@@ -135,7 +145,7 @@ impl<'a> RenderContext<'a> {
     Some(output)
   }
   
-  pub fn render(&mut self) -> anyhow::Result<()> {
+  pub fn render(&mut self, entity_manager: &mut entity::EntityManager) -> anyhow::Result<()> {
     self.window.request_redraw();
 
     if !self.is_surface_configured {
@@ -154,7 +164,8 @@ impl<'a> RenderContext<'a> {
     });
     
     {
-      let depth_texture = self.depth_texture.borrow_mut();
+      let depth_texture_entity = entity_manager.entity_get(self.depth_texture).unwrap().as_ref() as &dyn Any;
+      let depth_texture = depth_texture_entity.downcast_ref::<DepthTexture>().unwrap();
       let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Render Pass"),
         color_attachments: &[
@@ -262,8 +273,8 @@ impl<'a> InstanceManager<'a> {
 
     let mut entity_manager = entity::EntityManager::new();
 
-    let depth_texture = Rc::new(RefCell::new(DepthTexture::new(&device, &config)));
-    DepthTexture::manage(depth_texture.clone(), &mut entity_manager);
+    let depth_texture = DepthTexture::new(&device, &config); // object
+    let depth_texture = depth_texture.manage(&mut entity_manager); // id
 
     Ok(Self {
       render_context: RenderContext {
@@ -271,12 +282,12 @@ impl<'a> InstanceManager<'a> {
 	device,
 	queue,
 	config,
-	is_surface_configured: false,
-	window,
-	render_pipeline,
-	depth_texture,
+ 	is_surface_configured: false, // TODO: remove this ugly variable
+ 	window,
+ 	render_pipeline,
+ 	depth_texture,
       },
       entity_manager,
     })
   }
-}
+} 

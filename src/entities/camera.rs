@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use cgmath::InnerSpace;
 use cgmath::Vector3;
 use cgmath::Zero;
@@ -39,11 +36,17 @@ pub struct Camera {
   mouse_y: f64,
   running: bool,
 
-  entity_id: usize,
+  entity_id: EntityId,
 }
 
 impl Entity for Camera {
-  fn update(&mut self, _entity_index: &usize, render_context: &mut instance::RenderContext, fps: &fps::Fps) -> anyhow::Result<()> {
+  fn init(&mut self, id: EntityId) -> RequestedCallbacks {
+    self.entity_id = id;
+    
+    RequestedCallbacks::UPDATE | RequestedCallbacks::RENDER | RequestedCallbacks::EVENT
+  }
+  
+  fn update(&mut self, fps: &fps::Fps) -> anyhow::Result<()> {
     self.front =
       Matrix3::from_angle_y(Rad(-self.mouse_x as f32)) *
       Matrix3::from_angle_x(Rad(self.mouse_y as f32)) *
@@ -53,17 +56,21 @@ impl Entity for Camera {
     self.up = self.right.cross(self.front).normalize();
 
     self.update_view_proj();
-    render_context.uniform_write(
-      bytemuck::cast_slice(&[self.get_view_proj()]),
-      0
-    );
 
     self.fps = *fps;
 
     Ok(())
   }
 
-  fn event(&mut self, _entity_index: &usize, _instance: &mut instance::RenderContext, event: &crate::entities::entity::Event) -> anyhow::Result<()> {
+  fn render(&mut self, render_context: &mut instance::RenderContext) -> anyhow::Result<()> {
+    render_context.uniform_write(
+      bytemuck::cast_slice(&[self.get_view_proj()]),
+      0
+    );
+    Ok(())
+  }
+
+  fn event(&mut self, event: &crate::entities::entity::Event) -> anyhow::Result<()> {
     match *event {
       entity::Event::MouseMotion(d) => self.handle_mouse_delta(d),
       entity::Event::Resized(r) => self.resize(r.width, r.height),
@@ -71,10 +78,6 @@ impl Entity for Camera {
     }
     
     Ok(())
-  }
-
-  fn set_id(&mut self, new_id: usize) {
-    self.entity_id = new_id;
   }
 }
 
@@ -147,13 +150,13 @@ impl Camera {
       mouse_y: 0.0,
       running: false,
 
-      entity_id: 0,
+      entity_id: entity::EntityId::empty(),
     }
   }
 
   pub fn get_view_proj(&self) -> [[f32; 4]; 4] { self.view_proj }
-  pub fn manage(s: Rc<RefCell<Self>>, entity_manager: &mut EntityManager) -> usize {
-    entity_manager.entity_create(s)
+  pub fn manage(self, entity_manager: &mut EntityManager) -> EntityId {
+    entity_manager.entity_create(self)
   }
 
   fn handle_mouse_delta(&mut self, delta: (f64, f64)) {

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 mod fps;
 use fps::Fps;
@@ -32,7 +32,7 @@ impl<'a> State<'a> {
   pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
     let fps = Fps::new(fps::TargetFps::Unlimited);
     let size = window.inner_size();
-    let camera = Rc::new(RefCell::new(Camera::new(
+    let mut camera = Camera::new(
       CameraDescriptor {
 	speed: 5.0,
 	sensitivity: 0.001,
@@ -40,24 +40,17 @@ impl<'a> State<'a> {
 	aspect: size.width as f32 / size.height as f32,
 	fps,
       }
-    )));
+    );
 
     let mut chunk_manager = chunks::ChunkManager::new();
     chunks::Vertex::desc();
     chunk_manager.regenerate_chunks_at((0.0, 0.0, 0.0).into());
     let (vertices, indices) = chunk_manager.get_vertices_and_indices();
 
-    {
-      camera.borrow_mut().update_view_proj();
-    }
-
-    let view_proj = {
-      let camera_b = camera.borrow();
-      camera_b.get_view_proj()
-    };
+    camera.update_view_proj();
     
     let uniforms = vec![UniformDescriptor {
-      contents: bytemuck::cast_slice(&[view_proj]).into(),
+      contents: bytemuck::cast_slice(&[camera.get_view_proj()]).into(),
       visibility: wgpu::ShaderStages::VERTEX,
     }];
 
@@ -86,14 +79,8 @@ impl<'a> State<'a> {
     let mut instance_manager = InstanceManager::new(window, render_pipeline_desc).await?;
 
     let mut key_manager = KeyInputManager::new();
-    key_manager.register(camera.clone());
-    Camera::manage(
-      camera,
-      &mut instance_manager.entity_manager
-    );
-    key_manager.manage(
-      &mut instance_manager.entity_manager
-    );
+    key_manager.register(camera.manage(&mut instance_manager.entity_manager));
+    key_manager.manage(&mut instance_manager.entity_manager);
     Ok(Self {
       instance: instance_manager,
       fps,

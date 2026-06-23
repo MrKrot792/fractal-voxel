@@ -1,13 +1,14 @@
+use std::any::Any;
 use std::{cell::RefCell, rc::Rc, collections::HashMap};
+use std::borrow::BorrowMut;
 use winit::{
   event::{ElementState, KeyEvent},
   keyboard::{KeyCode, PhysicalKey}
 };
 
-use crate::entities::entity::{self, *};
-use crate::renderer::instance::RenderContext;
+use crate::entities::entity::{self, RequestedCallbacks};
 
-pub trait Inputable {
+pub trait Inputable: Any {
   fn handle_key(&mut self, keys: &mut KeyManager);
 }
 
@@ -81,22 +82,23 @@ pub enum KeyState {
 
 pub struct KeyInputManager {
   keys: KeyManager,
-  entity_id: usize,
-  inputables: HashMap<usize, Rc<RefCell<dyn Inputable>>>,
+  entity_id: entity::EntityId,
+  inputables: HashMap<usize, entity::EntityId>,
   inputable_last_id: usize,
 }
 
-impl Entity for KeyInputManager {
-  fn set_id(&mut self, new_id: usize) {
-    self.entity_id = new_id;
+impl entity::Entity for KeyInputManager {
+  fn init(&mut self, id: entity::EntityId) -> RequestedCallbacks {
+    self.entity_id = id;
+    RequestedCallbacks::UPDATE | RequestedCallbacks::EVENT
   }
-
-  fn update(&mut self, _entity_index: &usize, _instance: &mut RenderContext, _delta_time: &crate::fps::Fps) -> anyhow::Result<()> {
+  
+  fn update(&mut self, _delta_time: &crate::fps::Fps) -> anyhow::Result<()> {
     self.update();
     Ok(())
   }
 
-  fn event(&mut self, _entity_index: &usize, _instance: &mut RenderContext, event: &crate::entities::entity::Event) -> anyhow::Result<()> {
+  fn event(&mut self, event: &crate::entities::entity::Event) -> anyhow::Result<()> {
     if let entity::Event::Key(key_event) = event {
       self.keys.update_key(key_event)
     }
@@ -108,25 +110,27 @@ impl KeyInputManager {
   pub fn new() -> Self {
     Self {
       keys: KeyManager { keys: HashMap::with_capacity(128) },
-      entity_id: 0,
+      entity_id: entity::EntityId::empty(),
       inputables: HashMap::new(),
       inputable_last_id: 0,
     }
   }
 
-  pub fn register<T: Inputable + 'static>(&mut self, inputable: Rc<RefCell<T>>) {
+  pub fn register(&mut self, inputable: entity::EntityId) {
     self.inputables.insert(self.inputable_last_id, inputable);
   }
 
-  pub fn update(&mut self) {
-    for v in self.inputables.values() {
-      v.borrow_mut().handle_key(&mut self.keys);
-    }
+  pub fn update(&mut self, manager: &mut entity::EntityManagerInner) {
+for v in self.inputables.values() {
+  let e = manager.entity_get_mut(*v).unwrap();
+  let a = e.as_any_mut().downcast_ref::<dyn Inputable>().unwrap();
+  a.handle_key(&mut self.keys);
+}
     self.keys.update();
   }
   
   // TODO: maybe move this to the entity manager
-  pub fn manage(self, entity_manager: &mut EntityManager) -> usize {
-    entity_manager.entity_create(Rc::new(RefCell::new(self)))
+  pub fn manage(self, entity_manager: &mut entity::EntityManager) -> entity::EntityId {
+    entity_manager.entity_create(self)
   }
 }
